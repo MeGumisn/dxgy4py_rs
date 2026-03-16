@@ -1,0 +1,12 @@
+[package]
+name = "dxgi4py_rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# windows-capture 封裝了 WGC 邏輯
+windows-capture = { version = "1.5.0"}
+# 用於高性能內存拷貝
+piston-viewport = "1.0.2"
+
+opencv = "0.95.1"
