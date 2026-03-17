@@ -1,12 +1,12 @@
 pub mod captures;
 
-use crate::captures::{GrabItem, grab, start_grab, stop};
+use crate::captures::{GrabItem, start_grab, stop};
 use std::sync::Arc;
 use windows_capture::window::Window;
 // --- 在原有代碼基礎上添加以下接口 ---
 
 #[unsafe(no_mangle)]
-pub extern "C" fn start_grab_c(window_handle: isize) -> *mut Arc<GrabItem> {
+pub extern "C" fn init_dxgi(window_handle: isize) -> *mut Arc<GrabItem> {
     // 通過句柄獲取 Window 對象
     let window = Window::from_raw_hwnd(window_handle as _);
     let handler_arc = start_grab(window);
@@ -16,7 +16,7 @@ pub extern "C" fn start_grab_c(window_handle: isize) -> *mut Arc<GrabItem> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn grab_c(
+pub extern "C" fn grab(
     ptr: *mut Arc<GrabItem>,
     left: u32,
     top: u32,
@@ -25,12 +25,12 @@ pub extern "C" fn grab_c(
     dst_buf: *mut u8,
 ) -> *mut u8 {
     let handler_arc = unsafe { &*ptr };
-    let data = grab(handler_arc.clone(), left, top, right, bottom, dst_buf);
+    let data = captures::grab(handler_arc.clone(), left, top, right, bottom, dst_buf);
     data as *mut u8
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn stop_c(ptr: *mut Arc<GrabItem>) {
+pub extern "C" fn destroy(ptr: *mut Arc<GrabItem>) {
     if ptr.is_null() {
         return;
     }
@@ -38,6 +38,7 @@ pub extern "C" fn stop_c(ptr: *mut Arc<GrabItem>) {
     stop(*handler_arc); // 函數結束後 Arc 會自動 drop
 }
 
+#[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn free_buffer(ptr: *mut u8, len: usize) {
     // 用於釋放 grab_c 分配的圖像內存
