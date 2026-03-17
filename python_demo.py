@@ -10,14 +10,14 @@ from win32gui import GetWindowRect, FindWindow
 
 # 加载dll库
 rs_dxgi = ctypes.CDLL("H:\\RustProjects\\dxgi4py_rs\\target\\release\\dxgi4py_rs.dll")
-rs_dxgi.start_grab_c.argtypes = [wintypes.HWND]
-rs_dxgi.start_grab_c.restype = ctypes.c_void_p
+rs_dxgi.init_dxgi.argtypes = [wintypes.HWND]
+rs_dxgi.init_dxgi.restype = ctypes.c_void_p
 
-rs_dxgi.grab_c.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint,
+rs_dxgi.grab.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint,
                            ctypes.POINTER(ctypes.c_ubyte)]
-rs_dxgi.grab_c.restype = ctypes.POINTER(ctypes.c_ubyte)
+rs_dxgi.grab.restype = ctypes.POINTER(ctypes.c_ubyte)
 
-rs_dxgi.stop_c.argtypes = [ctypes.c_void_p]
+rs_dxgi.destroy.argtypes = [ctypes.c_void_p]
 # rs_dxgi.free_buffer.argtypes = [ctypes.POINTER(ctypes.c_ubyte), ctypes.c_size_t]
 
 dxgi = rs_dxgi
@@ -30,10 +30,10 @@ def test_dxgi(windowTitle):
 
     # time.sleep(10)
     # 初始化
-    handler = dxgi.start_grab_c(hwnd)
+    handler = dxgi.init_dxgi(hwnd)
     print("handler: " + str(handler))
     # 指定截图区域(这里示例为截取整个窗口)
-    left, top, right, bottom = GetWindowRect(hwnd)
+    left, top, right, bottom = DwmGet(hwnd)
     shotLeft, shotTop = 0, 0
     height = bottom - top
     width = right - left
@@ -47,8 +47,9 @@ def test_dxgi(windowTitle):
     print("test grab")
     os.makedirs('test_dxgi/' + windowTitle, exist_ok=True)
     i = 0
+    # 截图速度与画面实际帧率一致，显存中未渲染完成的画面也会正常返回
     for i in range(0, 60):
-        buffer = dxgi.grab_c(handler, shotLeft, shotTop, width, height, shotPointer)
+        buffer = dxgi.grab(handler, shotLeft, shotTop, width, height, shotPointer)
         # 获取结果
         image = np.ctypeslib.as_array(buffer, shape=(height, width, 4))
         # cv2.imwrite(, image)
@@ -61,10 +62,12 @@ def test_dxgi(windowTitle):
     # cv2.waitKey(0)
     return handler
 
-handler_qq = test_dxgi(windowTitle = '剑星')
-handler_phan = test_dxgi(windowTitle = 'Bot Vice')
+handler_qq = test_dxgi(windowTitle = '雷神加速器')
+handler_phan = test_dxgi(windowTitle = 'MuMu安卓设备')
 
 # 不再使用时销毁
-dxgi.stop_c(handler_phan)
-dxgi.stop_c(handler_qq)
-time.sleep(3)
+# destroy操作在capture handler调用close时就会提前返回，这里最好等待一段时间让d3d device完全释放之后之后再结束程序，否则会报错
+dxgi.destroy(handler_phan)
+dxgi.destroy(handler_qq)
+
+time.sleep(10)
