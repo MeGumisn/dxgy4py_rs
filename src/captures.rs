@@ -15,7 +15,6 @@ use windows_capture::{
     graphics_capture_api::InternalCaptureControl,
 };
 
-
 // 創建一個包裝類型
 struct SafePtr(*mut u8);
 
@@ -98,24 +97,29 @@ impl GraphicsCaptureApiHandler for CaptureHandler {
         let data = frame_buffer.as_nopadding_buffer()?;
         #[cfg(test)]
         println!("frame as_no_padding_buffer");
-        unsafe {
-            // TODO 自定义ERROR
-            let dst = self.grab_item.dst_buf.lock().unwrap();
-            if dst.0.is_null() {
-                eprintln!("Error: Target pointer is NULL");
-                return Ok(());
+        match self.grab_item.dst_buf.lock() {
+            Ok(dst) => {
+                if dst.0.is_null() {
+                    eprintln!("Error: Target pointer is NULL");
+                    return Ok(());
+                }
+                #[cfg(test)]
+                {
+                    let data_len = data.len();
+                    println!("Copying: src_len={}, dst_ptr={:?}", data_len, dst.0);
+                }
+                unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), dst.0, data.len()) }
             }
-            #[cfg(test)]{
-                let data_len = data.len();
-                println!("Copying: src_len={}, dst_ptr={:?}", data_len, dst.0);
-            }
-            std::ptr::copy_nonoverlapping(data.as_ptr(), dst.0, data.len())
+            Err(e) => eprintln!(
+                "Error: acquire dst_buf lock failed until frame capture: {:?}",
+                e
+            ),
         }
 
         #[cfg(test)]
         {
             // TODO 自定义ERROR
-            let mut buffer = grab_item.buffer.lock().unwrap();
+            let mut buffer = grab_item.buffer.lock().expect("grab buffer lock failed");
             let data_len = data.len();
             println!(
                 "frame start copy to buffer, buffer len:{}, data len: {}",
@@ -154,7 +158,7 @@ pub fn start_grab(window: Window) -> Arc<GrabItem> {
         capture_finished: AtomicBool::new(true),
         should_stop: AtomicBool::new(false),
         stop_succeeded: AtomicBool::new(true),
-        dst_buf: Mutex::new(SafePtr{0:null_mut()}),
+        dst_buf: Mutex::new(SafePtr { 0: null_mut() }),
     };
     let handler_arc = Arc::new(handler);
     // 2. 設定 (對應你設置 IsCursorCaptureEnabled 和 IsBorderRequired)
@@ -175,7 +179,10 @@ pub fn start_grab(window: Window) -> Arc<GrabItem> {
             eprintln!("Capture session failed to start: {:?}", e);
         }
     });
-    eprintln!("capture session started, handler: {}", handler_arc.as_ref() as *const _ as usize);
+    eprintln!(
+        "capture session started, handler: {}",
+        handler_arc.as_ref() as *const _ as usize
+    );
     handler_arc
 }
 
@@ -193,9 +200,12 @@ pub fn grab(
     handler_arc.bottom.store(bottom, Ordering::Release);
     // 確保在設置 should_capture 之前，capture_finished 是 false
     handler_arc.capture_finished.store(false, Ordering::Release);
-    {
-        let mut dst = handler_arc.dst_buf.lock().unwrap();
-        dst.0 = dst_buf;
+    match handler_arc.dst_buf.lock() {
+        Ok(mut dst) => dst.0 = dst_buf,
+        Err(e) => {
+            eprintln!("error: acquire dst_buf lock failed until grab: {}", e);
+            return std::ptr::null();
+        }
     }
     handler_arc.should_capture.store(true, Ordering::Release);
     while !handler_arc.capture_finished.load(Ordering::Acquire) {
@@ -243,7 +253,7 @@ fn grab_monitor(handler_arc: Arc<GrabItem>) {
 
 #[cfg(test)]
 pub fn test_grab() {
-    // 1. 查找窗口 (根據標題，替代 Hwnd 手動查找)
+    // 1. 查找窗口 (根據標題，替代 HWnd 手動查找)
     let window_qq = Window::enumerate()
         .expect("Failed to enumerate windows")
         .into_iter()
